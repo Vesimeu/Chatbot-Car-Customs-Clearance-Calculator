@@ -57,7 +57,7 @@ CONFIG = {
                     "brackets": [
                         {"min_cost_euro": 0, "max_cost_euro": 8500, "percent": 54, "min_per_cc": 2.5},
                         {"min_cost_euro": 8501, "max_cost_euro": 16700, "percent": 48, "min_per_cc": 3.5},
-                        {"min_cost_euro": 16701, "max_cost_euro": 42300, "percent": 48, "min_per_cc": 7.5},
+                        {"min_cost_euro": 16701, "max_cost_euro": 42300, "percent": 48, "min_per_cc": 5.5},
                         {"min_cost_euro": 42301, "max_cost_euro": 84500, "percent": 48, "min_per_cc": 7.5},
                         {"min_cost_euro": 84501, "max_cost_euro": 169000, "percent": 48, "min_per_cc": 15},
                         {"min_cost_euro": 169001, "max_cost_euro": float('inf'), "percent": 48, "min_per_cc": 20}
