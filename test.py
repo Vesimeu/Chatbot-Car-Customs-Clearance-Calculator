@@ -85,6 +85,18 @@ class TestCustomsCalculator(unittest.TestCase):
             abs(total_cost - expected_cost) <= self.tolerance,
             f"Итоговая стоимость {total_cost} не в пределах {expected_cost} ± {self.tolerance}"
         )
+    def test_three_to_five_1500cc_hibrid(self):
+        params = {**self.base_params[2], "age": "3-5", "engine_type": "hybrid"}
+        self.calculator.set_vehicle_details(**params)
+        results = self.calculator.calculate()
+        total_cost = results["Итоговая стоимость (RUB)"]
+        expected_cost = 2253861
+        logging.info(f"Итоговая стоимость: {total_cost} руб.")
+        self.assertTrue(
+            abs(total_cost - expected_cost) <= self.tolerance,
+            f"Итоговая стоимость {total_cost} не в пределах {expected_cost} ± {self.tolerance}"
+        )
+
 
     def test_three_to_five_2000cc_gasoline(self):
         params = {**self.base_params[1], "age": "3-5", "engine_type": "gasoline"}
@@ -92,6 +104,18 @@ class TestCustomsCalculator(unittest.TestCase):
         results = self.calculator.calculate()
         total_cost = results["Итоговая стоимость (RUB)"]
         expected_cost = 2518649.2
+        logging.info(f"Итоговая стоимость: {total_cost} руб.")
+        self.assertTrue(
+            abs(total_cost - expected_cost) <= self.tolerance,
+            f"Итоговая стоимость {total_cost} не в пределах {expected_cost} ± {self.tolerance}"
+        )
+
+    def test_three_to_five_2000cc_hibrid(self):
+        params = {**self.base_params[1], "age": "3-5", "engine_type": "hybrid"}
+        self.calculator.set_vehicle_details(**params)
+        results = self.calculator.calculate()
+        total_cost = results["Итоговая стоимость (RUB)"]
+        expected_cost = 2518650
         logging.info(f"Итоговая стоимость: {total_cost} руб.")
         self.assertTrue(
             abs(total_cost - expected_cost) <= self.tolerance,
