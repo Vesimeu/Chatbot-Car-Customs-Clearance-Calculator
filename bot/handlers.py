@@ -4,7 +4,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Command
 from states import CalculatorStates
 from keyboards import get_age_keyboard, get_engine_type_keyboard, get_back_keyboard
-from calculate import CustomsCalculator, WrongParamException
+from service.calculate import CustomsCalculator, WrongParamException
 
 # Настройка логирования
 logger = logging.getLogger(__name__)

@@ -1,6 +1,5 @@
-from calculate import CustomsCalculator, WrongParamException
+from service.calculate import CustomsCalculator, WrongParamException
 import logging
-from tabulate import tabulate
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')

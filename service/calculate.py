@@ -1,5 +1,5 @@
 import logging
-from config import CONFIG, EngineType, VehicleAge, EUR_TO_RUB
+from service.config import CONFIG, EngineType, VehicleAge, EUR_TO_RUB
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')

@@ -1,6 +1,6 @@
 import logging
 import unittest
-from calculate import CustomsCalculator, WrongParamException
+from service.calculate import CustomsCalculator, WrongParamException
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
