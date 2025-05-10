@@ -1,4 +1,4 @@
-from service.calculate import CustomsCalculator, WrongParamException
+from bot.calculate import CustomsCalculator, WrongParamException
 import logging
 
 # Настройка логирования
