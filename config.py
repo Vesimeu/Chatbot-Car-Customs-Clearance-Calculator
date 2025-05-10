@@ -11,6 +11,24 @@ class VehicleAge(Enum):
     UNDER_THREE = "до 3"
     THREE_TO_FIVE = "3-5"
 
+# Курсы валют (константы)
+EUR_TO_RUB = 92.908
+USD_TO_RUB = 92.0  # Примерный курс USD/RUB
+CNY_TO_RUB = 11   # Примерный курс CNY/RUB
+KRW_TO_RUB = 0.07   # Примерный курс KRW/RUB
+
+# Комиссии для доставки
+DELIVERY_FEES = {
+    "china": {
+        "usd": 4100,      # 4.100 USD
+        "rub": 50000      # 50.000 RUB
+    },
+    "korea": {
+        "usd": 2500,      # 2.500 USD
+        "rub": 150000     # 150.000 RUB
+    }
+}
+
 # Конфигурация тарифов
 CONFIG = {
     "tariffs": {
@@ -19,7 +37,7 @@ CONFIG = {
                 "до 3": {
                     "gasoline": {
                         "default": 0.17,
-                        "over_3.501": 137.11  # Для объёма >3.501 см³
+                        "over_3.501": 137.11
                     },
                     "diesel": {
                         "default": 0.17,
@@ -33,9 +51,9 @@ CONFIG = {
                 },
                 "3-5": {
                     "gasoline": {
-                        "default": 0.26,          # ≤3.000 см³
-                        "3.001-3.500": 164.84,    # 3.001–3.500 см³
-                        "over_3.501": 180.24      # >3.501 см³
+                        "default": 0.26,
+                        "3.001-3.500": 164.84,
+                        "over_3.501": 180.24
                     },
                     "diesel": {
                         "default": 0.26,
@@ -96,6 +114,3 @@ CONFIG = {
         }
     }
 }
-
-# Статический курс EUR/RUB для расчётов
-EUR_TO_RUB = 92.908

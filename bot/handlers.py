@@ -3,15 +3,15 @@ from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Command
 from states import CalculatorStates
-from keyboards import get_age_keyboard, get_engine_type_keyboard, get_back_keyboard
+from keyboards import get_age_keyboard, get_engine_type_keyboard, get_back_keyboard, get_region_keyboard
 from service.calculate import CustomsCalculator, WrongParamException
 
-# Настройка логирования
 logger = logging.getLogger(__name__)
 
 def register_handlers(dp: Dispatcher):
     dp.register_message_handler(start_command, commands=['start'])
     dp.register_message_handler(cancel_command, commands=['cancel'], state='*')
+    dp.register_message_handler(process_region, state=CalculatorStates.region)
     dp.register_message_handler(process_age, state=CalculatorStates.age)
     dp.register_message_handler(process_engine_type, state=CalculatorStates.engine_type)
     dp.register_message_handler(process_engine_capacity, state=CalculatorStates.engine_capacity)
@@ -22,14 +22,30 @@ def register_handlers(dp: Dispatcher):
 async def start_command(message: types.Message, state: FSMContext):
     await state.finish()
     await message.answer(
-        "Добро пожаловать в калькулятор таможенных платежей!\nВыберите возраст автомобиля:",
-        reply_markup=get_age_keyboard()
+        "Добро пожаловать в калькулятор таможенных платежей!\nВыберите регион доставки:",
+        reply_markup=get_region_keyboard()
     )
-    await CalculatorStates.age.set()
+    await CalculatorStates.region.set()
 
 async def cancel_command(message: types.Message, state: FSMContext):
     await state.finish()
     await message.answer("Расчёт отменён. Нажмите /start для нового расчёта.", reply_markup=types.ReplyKeyboardRemove())
+
+async def process_region(message: types.Message, state: FSMContext):
+    region_text = message.text
+    if region_text == "Китай (до Перми)":
+        region = "china"
+    elif region_text == "Корея (до Владивостока)":
+        region = "korea"
+    else:
+        await message.answer("Пожалуйста, выберите регион из предложенных:", reply_markup=get_region_keyboard())
+        return
+    await state.update_data(region=region)
+    await message.answer(
+        "Выберите возраст автомобиля:",
+        reply_markup=get_age_keyboard()
+    )
+    await CalculatorStates.age.set()
 
 async def process_age(message: types.Message, state: FSMContext):
     age = message.text
@@ -87,8 +103,10 @@ async def process_engine_power(message: types.Message, state: FSMContext):
         await message.answer("Введите корректную мощность двигателя (число больше 0):", reply_markup=get_back_keyboard())
         return
     await state.update_data(engine_power=engine_power)
+    data = await state.get_data()
+    currency = "юанях" if data['region'] == "china" else "вонах"
     await message.answer(
-        "Введите цену автомобиля (руб.):",
+        f"Введите цену автомобиля (в {currency}):",
         reply_markup=get_back_keyboard()
     )
     await CalculatorStates.price.set()
@@ -99,11 +117,13 @@ async def process_price(message: types.Message, state: FSMContext):
         await CalculatorStates.engine_power.set()
         return
     try:
-        price_rub = float(message.text)
-        if price_rub < 10000:
-            raise ValueError("Цена автомобиля должна быть не менее 10,000 руб.")
+        price = float(message.text)
+        if price < 0:
+            raise ValueError("Цена автомобиля не может быть отрицательной")
     except ValueError:
-        await message.answer("Введите корректную цену автомобиля (число не менее 10,000 руб.):", reply_markup=get_back_keyboard())
+        data = await state.get_data()
+        currency = "юанях" if data['region'] == "china" else "вонах"
+        await message.answer(f"Введите корректную цену автомобиля (число не менее 0, в {currency}):", reply_markup=get_back_keyboard())
         return
 
     data = await state.get_data()
@@ -114,11 +134,8 @@ async def process_price(message: types.Message, state: FSMContext):
             engine_capacity=data['engine_capacity'],
             engine_power=data['engine_power'],
             engine_type=data['engine_type'],
-            price_rub=price_rub,
-            korean_work_rub=0,
-            agent_fee_rub=0,
-            vladivostok_work_rub=0,
-            delivery_rub=0
+            price=price,
+            region=data['region']
         )
         results = calculator.calculate()
         response = "\n".join([f"{key}: {value:,.2f} руб." if isinstance(value, (int, float)) else f"{key}: {value}" for key, value in results.items()])
@@ -131,9 +148,12 @@ async def process_price(message: types.Message, state: FSMContext):
 
 async def back_handler(callback_query: types.CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
-    if current_state == CalculatorStates.age.state:
+    if current_state == CalculatorStates.region.state:
         await callback_query.message.answer("Вы уже на первом шаге. Нажмите /start для нового расчёта.")
         await state.finish()
+    elif current_state == CalculatorStates.age.state:
+        await callback_query.message.edit_text("Выберите регион доставки:", reply_markup=get_region_keyboard())
+        await CalculatorStates.region.set()
     elif current_state == CalculatorStates.engine_type.state:
         await callback_query.message.edit_text("Выберите возраст автомобиля:", reply_markup=get_age_keyboard())
         await CalculatorStates.age.set()
