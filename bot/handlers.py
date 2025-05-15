@@ -13,7 +13,6 @@ import re
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
-
 # Определение состояний FSM
 class CalculationStates(StatesGroup):
     region = State()
@@ -22,7 +21,6 @@ class CalculationStates(StatesGroup):
     engine_capacity = State()
     engine_power = State()
     price = State()
-
 
 def register_handlers(dp: Dispatcher):
     client = CalcusAPIClient()
@@ -39,6 +37,8 @@ def register_handlers(dp: Dispatcher):
             )
             return
 
+        # Сбрасываем состояние перед началом нового расчёта
+        await state.finish()
         async with state.proxy() as data:
             data['remaining_attempts'] = remaining_attempts
 
@@ -68,10 +68,20 @@ def register_handlers(dp: Dispatcher):
             "Гибридный": "hybrid",
             "Электрический": "electric"
         }
-        async with state.proxy() as data:
-            data['engine_type'] = engine_map[message.text]
-        await message.answer("Введите объём двигателя (см³):", reply_markup=types.ReplyKeyboardRemove())
-        await CalculationStates.engine_capacity.set()
+        try:
+            async with state.proxy() as data:
+                data['engine_type'] = engine_map[message.text]
+                if data['engine_type'] == "electric":
+                    data['engine_capacity'] = 0  # Устанавливаем объём 0 для электрического
+                    await message.answer("Введите мощность двигателя (л.с.):", reply_markup=types.ReplyKeyboardRemove())
+                    await CalculationStates.engine_power.set()
+                else:
+                    await message.answer("Введите объём двигателя (см³):", reply_markup=types.ReplyKeyboardRemove())
+                    await CalculationStates.engine_capacity.set()
+        except LookupError as e:
+            logger.error(f"Ошибка состояния: {e}")
+            await message.answer("Произошла ошибка. Пожалуйста, начните заново с /start.")
+            await state.finish()
 
     @dp.message_handler(regexp=r'^\d+(\.\d+)?$', state=CalculationStates.engine_capacity)
     async def process_engine_capacity(message: types.Message, state: FSMContext):
@@ -85,6 +95,10 @@ def register_handlers(dp: Dispatcher):
             await CalculationStates.engine_power.set()
         except ValueError:
             await message.answer("Пожалуйста, введите корректное число (например, 2000).")
+        except LookupError as e:
+            logger.error(f"Ошибка состояния: {e}")
+            await message.answer("Произошла ошибка. Пожалуйста, начните заново с /start.")
+            await state.finish()
 
     @dp.message_handler(regexp=r'^\d+(\.\d+)?$', state=CalculationStates.engine_power)
     async def process_engine_power(message: types.Message, state: FSMContext):
@@ -99,6 +113,10 @@ def register_handlers(dp: Dispatcher):
             await CalculationStates.price.set()
         except ValueError:
             await message.answer("Пожалуйста, введите корректное число (например, 300).")
+        except LookupError as e:
+            logger.error(f"Ошибка состояния: {e}")
+            await message.answer("Произошла ошибка. Пожалуйста, начните заново с /start.")
+            await state.finish()
 
     @dp.message_handler(regexp=r'^\d+(\.\d+)?$', state=CalculationStates.price)
     async def process_price(message: types.Message, state: FSMContext):
@@ -152,7 +170,8 @@ def register_handlers(dp: Dispatcher):
                 f"Комиссия ({region}, USD): {usd_fee:,.0f} RUB\n"
                 f"Комиссия ({region}, RUB): {rub_fee:,.0f} RUB\n"
                 f"Итоговая стоимость до {destination}: {total_cost:,.0f} RUB\n\n"
-                f"Осталось расчётов на сегодня: {remaining_attempts}"
+                f"Осталось расчётов на сегодня: {remaining_attempts}\n"
+                f"Чтобы ещё раз рассчитать, напишите /start"
             )
 
             await message.answer(response, reply_markup=types.ReplyKeyboardRemove())
@@ -160,3 +179,7 @@ def register_handlers(dp: Dispatcher):
 
         except ValueError:
             await message.answer("Пожалуйста, введите корректное число (например, 5000000).")
+        except LookupError as e:
+            logger.error(f"Ошибка состояния: {e}")
+            await message.answer("Произошла ошибка. Пожалуйста, начните заново с /start.")
+            await state.finish()
