@@ -1,16 +1,25 @@
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters import Text
-from aiogram.dispatcher.filters import RegexpCommandsFilter
+from aiogram.dispatcher.filters import Text, RegexpCommandsFilter
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from api_client import CalcusAPIClient
 from keyboards import get_region_keyboard, get_age_keyboard, get_engine_type_keyboard
-from config import USD_TO_RUB
-from states import CalculationStates
+from convector import USD_TO_RUB
 import logging
 import re
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
+
+# Определение состояний FSM
+class CalculationStates(StatesGroup):
+    region = State()
+    age = State()
+    engine_type = State()
+    engine_capacity = State()
+    engine_power = State()
+    price = State()
 
 def register_handlers(dp: Dispatcher):
     client = CalcusAPIClient()
