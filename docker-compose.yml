@@ -1,11 +1,18 @@
 services:
-     bot:
-       build: .
-       container_name: chatbot-car-customs-clearance-calculator-bot-1
-       volumes:
-         - .:/app
-       environment:
-         - BOT_TOKEN=${BOT_TOKEN}
-         - CALCUS_CLIENT_ID=${CALCUS_CLIENT_ID}
-         - CALCUS_API_KEY=${CALCUS_API_KEY}
-       restart: unless-stopped
+  bot:
+    build: .
+    container_name: chatbot-car-customs-clearance-calculator-bot-1
+    volumes:
+      - .:/ChatbotCarCustomsClearanceCalculator
+      - ./usage_data.db:/ChatbotCarCustomsClearanceCalculator/usage_data.db
+      - ./usd_to_rub.json:/ChatbotCarCustomsClearanceCalculator/usd_to_rub.json
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - CALCUS_CLIENT_ID=${CALCUS_CLIENT_ID}
+      - CALCUS_API_KEY=${CALCUS_API_KEY}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
