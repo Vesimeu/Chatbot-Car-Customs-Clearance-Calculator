@@ -1,17 +1,11 @@
-version: '3.8'
-
 services:
-  bot:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - .:/app
-    env_file:
-      - .env
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+     bot:
+       build: .
+       container_name: chatbot-car-customs-clearance-calculator-bot-1
+       volumes:
+         - .:/app
+       environment:
+         - BOT_TOKEN=${BOT_TOKEN}
+         - CALCUS_CLIENT_ID=${CALCUS_CLIENT_ID}
+         - CALCUS_API_KEY=${CALCUS_API_KEY}
+       restart: unless-stopped
