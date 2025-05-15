@@ -1,6 +1,6 @@
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
-class CalculatorStates(StatesGroup):
+class CalculationStates(StatesGroup):
     region = State()
     age = State()
     engine_type = State()

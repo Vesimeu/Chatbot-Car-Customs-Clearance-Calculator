@@ -1,169 +1,134 @@
-import logging
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters import Command
-from states import CalculatorStates
-from keyboards import get_age_keyboard, get_engine_type_keyboard, get_back_keyboard, get_region_keyboard
-from calculate import CustomsCalculator, WrongParamException
+from aiogram.dispatcher.filters import Text
+from aiogram.dispatcher.filters import RegexpCommandsFilter
+from api_client import CalcusAPIClient
+from keyboards import get_region_keyboard, get_age_keyboard, get_engine_type_keyboard
+from config import USD_TO_RUB
+from states import CalculationStates
+import logging
+import re
 
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 def register_handlers(dp: Dispatcher):
-    dp.register_message_handler(start_command, commands=['start'])
-    dp.register_message_handler(cancel_command, commands=['cancel'], state='*')
-    dp.register_message_handler(process_region, state=CalculatorStates.region)
-    dp.register_message_handler(process_age, state=CalculatorStates.age)
-    dp.register_message_handler(process_engine_type, state=CalculatorStates.engine_type)
-    dp.register_message_handler(process_engine_capacity, state=CalculatorStates.engine_capacity)
-    dp.register_message_handler(process_engine_power, state=CalculatorStates.engine_power)
-    dp.register_message_handler(process_price, state=CalculatorStates.price)
-    dp.register_callback_query_handler(back_handler, lambda c: c.data == 'back', state='*')
+    client = CalcusAPIClient()
 
-async def start_command(message: types.Message, state: FSMContext):
-    await state.finish()
-    await message.answer(
-        "Добро пожаловать в калькулятор таможенных платежей!\nВыберите регион доставки:",
-        reply_markup=get_region_keyboard()
-    )
-    await CalculatorStates.region.set()
+    @dp.message_handler(commands=['start'])
+    async def cmd_start(message: types.Message, state: FSMContext):
+        await message.answer("Выберите регион:", reply_markup=get_region_keyboard())
+        await CalculationStates.region.set()
 
-async def cancel_command(message: types.Message, state: FSMContext):
-    await state.finish()
-    await message.answer("Расчёт отменён. Нажмите /start для нового расчёта.", reply_markup=types.ReplyKeyboardRemove())
+    @dp.message_handler(Text(equals=["Китай", "Корея"]), state=CalculationStates.region)
+    async def process_region(message: types.Message, state: FSMContext):
+        async with state.proxy() as data:
+            data['region'] = message.text
+        await message.answer("Выберите возраст автомобиля:", reply_markup=get_age_keyboard())
+        await CalculationStates.age.set()
 
-async def process_region(message: types.Message, state: FSMContext):
-    region_text = message.text
-    if region_text == "Китай (до Перми)":
-        region = "china"
-    elif region_text == "Корея (до Владивостока)":
-        region = "korea"
-    else:
-        await message.answer("Пожалуйста, выберите регион из предложенных:", reply_markup=get_region_keyboard())
-        return
-    await state.update_data(region=region)
-    await message.answer(
-        "Выберите возраст автомобиля:",
-        reply_markup=get_age_keyboard()
-    )
-    await CalculatorStates.age.set()
-
-async def process_age(message: types.Message, state: FSMContext):
-    age = message.text
-    if age not in ["до 3", "3-5"]:
-        await message.answer("Пожалуйста, выберите возраст из предложенных:", reply_markup=get_age_keyboard())
-        return
-    await state.update_data(age=age)
-    await message.answer(
-        "Выберите тип двигателя:",
-        reply_markup=get_engine_type_keyboard()
-    )
-    await CalculatorStates.engine_type.set()
-
-async def process_engine_type(message: types.Message, state: FSMContext):
-    engine_type = message.text.lower()
-    if engine_type not in ["gasoline", "diesel", "electric", "hybrid"]:
-        await message.answer("Пожалуйста, выберите тип двигателя из предложенных:", reply_markup=get_engine_type_keyboard())
-        return
-    await state.update_data(engine_type=engine_type)
-    await message.answer(
-        "Введите объём двигателя (см³):",
-        reply_markup=get_back_keyboard()
-    )
-    await CalculatorStates.engine_capacity.set()
-
-async def process_engine_capacity(message: types.Message, state: FSMContext):
-    if message.text == "Назад":
+    @dp.message_handler(Text(equals=["до 3", "3-5"]), state=CalculationStates.age)
+    async def process_age(message: types.Message, state: FSMContext):
+        async with state.proxy() as data:
+            data['vehicle_age'] = message.text
         await message.answer("Выберите тип двигателя:", reply_markup=get_engine_type_keyboard())
-        await CalculatorStates.engine_type.set()
-        return
-    try:
-        engine_capacity = float(message.text)
-        if engine_capacity <= 0:
-            raise ValueError("Объём двигателя должен быть больше 0")
-    except ValueError:
-        await message.answer("Введите корректный объём двигателя (число больше 0):", reply_markup=get_back_keyboard())
-        return
-    await state.update_data(engine_capacity=engine_capacity)
-    await message.answer(
-        "Введите мощность двигателя (л.с.):",
-        reply_markup=get_back_keyboard()
-    )
-    await CalculatorStates.engine_power.set()
+        await CalculationStates.engine_type.set()
 
-async def process_engine_power(message: types.Message, state: FSMContext):
-    if message.text == "Назад":
-        await message.answer("Введите объём двигателя (см³):", reply_markup=get_back_keyboard())
-        await CalculatorStates.engine_capacity.set()
-        return
-    try:
-        engine_power = float(message.text)
-        if engine_power <= 0:
-            raise ValueError("Мощность двигателя должна быть больше 0")
-    except ValueError:
-        await message.answer("Введите корректную мощность двигателя (число больше 0):", reply_markup=get_back_keyboard())
-        return
-    await state.update_data(engine_power=engine_power)
-    data = await state.get_data()
-    currency = "юанях" if data['region'] == "china" else "вонах"
-    await message.answer(
-        f"Введите цену автомобиля (в {currency}):",
-        reply_markup=get_back_keyboard()
-    )
-    await CalculatorStates.price.set()
+    @dp.message_handler(Text(equals=["Бензиновый", "Дизельный", "Гибридный", "Электрический"]), state=CalculationStates.engine_type)
+    async def process_engine_type(message: types.Message, state: FSMContext):
+        engine_map = {
+            "Бензиновый": "gasoline",
+            "Дизельный": "diesel",
+            "Гибридный": "hybrid",
+            "Электрический": "electric"
+        }
+        async with state.proxy() as data:
+            data['engine_type'] = engine_map[message.text]
+        await message.answer("Введите объём двигателя (см³):", reply_markup=types.ReplyKeyboardRemove())
+        await CalculationStates.engine_capacity.set()
 
-async def process_price(message: types.Message, state: FSMContext):
-    if message.text == "Назад":
-        await message.answer("Введите мощность двигателя (л.с.):", reply_markup=get_back_keyboard())
-        await CalculatorStates.engine_power.set()
-        return
-    try:
-        price = float(message.text)
-        if price < 0:
-            raise ValueError("Цена автомобиля не может быть отрицательной")
-    except ValueError:
-        data = await state.get_data()
-        currency = "юанях" if data['region'] == "china" else "вонах"
-        await message.answer(f"Введите корректную цену автомобиля (число не менее 0, в {currency}):", reply_markup=get_back_keyboard())
-        return
+    @dp.message_handler(regexp=r'^\d+(\.\d+)?$', state=CalculationStates.engine_capacity)
+    async def process_engine_capacity(message: types.Message, state: FSMContext):
+        try:
+            capacity = float(message.text)
+            if capacity <= 0:
+                raise ValueError("Объём должен быть положительным")
+            async with state.proxy() as data:
+                data['engine_capacity'] = capacity
+            await message.answer("Введите мощность двигателя (л.с.):")
+            await CalculationStates.engine_power.set()
+        except ValueError:
+            await message.answer("Пожалуйста, введите корректное число (например, 2000).")
 
-    data = await state.get_data()
-    calculator = CustomsCalculator()
-    try:
-        calculator.set_vehicle_details(
-            age=data['age'],
-            engine_capacity=data['engine_capacity'],
-            engine_power=data['engine_power'],
-            engine_type=data['engine_type'],
-            price=price,
-            region=data['region']
-        )
-        results = calculator.calculate()
-        response = "\n".join([f"{key}: {value:,.2f} руб." if isinstance(value, (int, float)) else f"{key}: {value}" for key, value in results.items()])
-        await message.answer(f"Результаты расчёта:\n{response}", reply_markup=types.ReplyKeyboardRemove())
-    except WrongParamException as e:
-        await message.answer(f"Ошибка: {e}", reply_markup=types.ReplyKeyboardRemove())
-    finally:
-        await state.finish()
-        await message.answer("Нажмите /start для нового расчёта.")
+    @dp.message_handler(regexp=r'^\d+(\.\d+)?$', state=CalculationStates.engine_power)
+    async def process_engine_power(message: types.Message, state: FSMContext):
+        try:
+            power = float(message.text)
+            if power <= 0:
+                raise ValueError("Мощность должна быть положительной")
+            async with state.proxy() as data:
+                data['engine_power'] = power
+                currency = "CNY" if data["region"] == "Китай" else "KRW"
+            await message.answer(f"Введите стоимость автомобиля ({currency}):")
+            await CalculationStates.price.set()
+        except ValueError:
+            await message.answer("Пожалуйста, введите корректное число (например, 300).")
 
-async def back_handler(callback_query: types.CallbackQuery, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state == CalculatorStates.region.state:
-        await callback_query.message.answer("Вы уже на первом шаге. Нажмите /start для нового расчёта.")
-        await state.finish()
-    elif current_state == CalculatorStates.age.state:
-        await callback_query.message.edit_text("Выберите регион доставки:", reply_markup=get_region_keyboard())
-        await CalculatorStates.region.set()
-    elif current_state == CalculatorStates.engine_type.state:
-        await callback_query.message.edit_text("Выберите возраст автомобиля:", reply_markup=get_age_keyboard())
-        await CalculatorStates.age.set()
-    elif current_state == CalculatorStates.engine_capacity.state:
-        await callback_query.message.edit_text("Выберите тип двигателя:", reply_markup=get_engine_type_keyboard())
-        await CalculatorStates.engine_type.set()
-    elif current_state == CalculatorStates.engine_power.state:
-        await callback_query.message.edit_text("Введите объём двигателя (см³):", reply_markup=get_back_keyboard())
-        await CalculatorStates.engine_capacity.set()
-    elif current_state == CalculatorStates.price.state:
-        await callback_query.message.edit_text("Введите мощность двигателя (л.с.):", reply_markup=get_back_keyboard())
-        await CalculatorStates.engine_power.set()
-    await callback_query.answer()
+    @dp.message_handler(regexp=r'^\d+(\.\d+)?$', state=CalculationStates.price)
+    async def process_price(message: types.Message, state: FSMContext):
+        try:
+            price = float(message.text)
+            if price <= 0:
+                raise ValueError("Стоимость должна быть положительной")
+            async with state.proxy() as data:
+                currency = "CNY" if data["region"] == "Китай" else "KRW"
+                data['vehicle_price'] = price
+                data['currency'] = currency
+
+            # Параметры для API
+            params = {
+                "vehicle_age": data["vehicle_age"],
+                "engine_type": data["engine_type"],
+                "engine_power": data["engine_power"],
+                "engine_capacity": data["engine_capacity"],
+                "vehicle_price": data["vehicle_price"],
+                "currency": data["currency"]
+            }
+
+            # Вызов API
+            result = client.calculate_customs(params)
+            if not result:
+                await message.answer("Ошибка расчёта. Попробуйте позже.")
+                await state.finish()
+                return
+
+            # Комиссии
+            region = data["region"]
+            if region == "Китай":
+                usd_fee = 4100 * USD_TO_RUB  # 4100 USD
+                rub_fee = 50000
+                destination = "Перми"
+            else:  # Корея
+                usd_fee = 2500 * USD_TO_RUB  # 2500 USD
+                rub_fee = 150000
+                destination = "Владивостока"
+
+            # Итоговая стоимость
+            total_cost = result["total2"] + usd_fee + rub_fee
+
+            # Формирование ответа
+            response = (
+                f"Результаты расчёта:\n"
+                f"Таможенный сбор: {result['sbor']:,.0f} RUB\n"
+                f"Таможенная пошлина: {result['tax']:,.0f} RUB\n"
+                f"Утилизационный сбор: {result['util']:,.0f} RUB\n"
+                f"Комиссия ({region}, USD): {usd_fee:,.0f} RUB\n"
+                f"Комиссия ({region}, RUB): {rub_fee:,.0f} RUB\n"
+                f"Итоговая стоимость до {destination}: {total_cost:,.0f} RUB"
+            )
+
+            await message.answer(response, reply_markup=types.ReplyKeyboardRemove())
+            await state.finish()
+
+        except ValueError:
+            await message.answer("Пожалуйста, введите корректное число (например, 5000000).")
