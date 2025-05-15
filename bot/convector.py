@@ -5,17 +5,19 @@ from datetime import datetime
 import schedule
 import time
 import logging
+import threading
+from usage_tracker import clean_old_usage_data  # Импортируем для очистки
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 # Путь к файлу для кэширования курса
 CACHE_FILE = "usd_to_rub.json"
-# URL для ExchangeRate-API (без ключа, обновление раз в 24 часа)
+# URL для ExchangeRate-API
 API_URL = "https://open.exchangerate-api.com/v6/latest"
 
 # Инициализация курса по умолчанию
-USD_TO_RUB = 85.0  # Запасное значение, если API недоступен
+USD_TO_RUB = 85.0
 
 def load_cached_rate():
     """Загружает кэшированный курс из файла."""
@@ -24,7 +26,6 @@ def load_cached_rate():
         if os.path.exists(CACHE_FILE):
             with open(CACHE_FILE, 'r') as f:
                 data = json.load(f)
-                # Проверяем, что данные свежие (сегодняшние)
                 cache_date = datetime.strptime(data['date'], '%Y-%m-%d')
                 if cache_date.date() == datetime.now().date():
                     USD_TO_RUB = data['rate']
@@ -37,7 +38,7 @@ def load_cached_rate():
             update_exchange_rate()
     except Exception as e:
         logger.error(f"Ошибка при загрузке кэша: {e}")
-        USD_TO_RUB = 90.0  # Запасное значение
+        USD_TO_RUB = 90.0
 
 def save_cached_rate(rate):
     """Сохраняет курс в кэш."""
@@ -69,20 +70,18 @@ def update_exchange_rate():
             logger.error(f"Ошибка API: статус {response.status_code}")
     except Exception as e:
         logger.error(f"Ошибка при запросе к API: {e}")
-        USD_TO_RUB = 90.0  # Запасное значение
+        USD_TO_RUB = 90.0
 
-def schedule_update():
-    """Планирует ежедневное обновление курса."""
+def schedule_tasks():
+    """Планирует ежедневное обновление курса и очистку данных."""
     schedule.every().day.at("09:00").do(update_exchange_rate)
-    logger.info("Запланировано ежедневное обновление курса в 09:00")
+    schedule.every().day.at("09:00").do(clean_old_usage_data)
+    logger.info("Запланированы ежедневные задачи в 09:00: обновление курса и очистка данных")
     while True:
         schedule.run_pending()
         time.sleep(60)
 
 if __name__ == "__main__":
-    # Загружаем курс при запуске
     load_cached_rate()
-    # Запускаем планировщик в фоновом режиме
-    import threading
-    scheduler_thread = threading.Thread(target=schedule_update, daemon=True)
+    scheduler_thread = threading.Thread(target=schedule_tasks, daemon=True)
     scheduler_thread.start()

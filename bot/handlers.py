@@ -6,11 +6,13 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from api_client import CalcusAPIClient
 from keyboards import get_region_keyboard, get_age_keyboard, get_engine_type_keyboard
 from convector import USD_TO_RUB
+from usage_tracker import check_and_update_usage, MAX_ATTEMPTS
 import logging
 import re
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
+
 
 # Определение состояний FSM
 class CalculationStates(StatesGroup):
@@ -21,11 +23,25 @@ class CalculationStates(StatesGroup):
     engine_power = State()
     price = State()
 
+
 def register_handlers(dp: Dispatcher):
     client = CalcusAPIClient()
 
     @dp.message_handler(commands=['start'])
     async def cmd_start(message: types.Message, state: FSMContext):
+        user_id = message.from_user.id
+        can_proceed, remaining_attempts, reset_date = check_and_update_usage(user_id)
+
+        if not can_proceed:
+            await message.answer(
+                f"Вы исчерпали лимит ({MAX_ATTEMPTS} расчёта в день). "
+                f"Попробуйте снова завтра ({reset_date})."
+            )
+            return
+
+        async with state.proxy() as data:
+            data['remaining_attempts'] = remaining_attempts
+
         await message.answer("Выберите регион:", reply_markup=get_region_keyboard())
         await CalculationStates.region.set()
 
@@ -43,7 +59,8 @@ def register_handlers(dp: Dispatcher):
         await message.answer("Выберите тип двигателя:", reply_markup=get_engine_type_keyboard())
         await CalculationStates.engine_type.set()
 
-    @dp.message_handler(Text(equals=["Бензиновый", "Дизельный", "Гибридный", "Электрический"]), state=CalculationStates.engine_type)
+    @dp.message_handler(Text(equals=["Бензиновый", "Дизельный", "Гибридный", "Электрический"]),
+                        state=CalculationStates.engine_type)
     async def process_engine_type(message: types.Message, state: FSMContext):
         engine_map = {
             "Бензиновый": "gasoline",
@@ -93,6 +110,7 @@ def register_handlers(dp: Dispatcher):
                 currency = "CNY" if data["region"] == "Китай" else "KRW"
                 data['vehicle_price'] = price
                 data['currency'] = currency
+                remaining_attempts = data['remaining_attempts']
 
             # Параметры для API
             params = {
@@ -114,11 +132,11 @@ def register_handlers(dp: Dispatcher):
             # Комиссии
             region = data["region"]
             if region == "Китай":
-                usd_fee = 4100 * USD_TO_RUB  # 4100 USD
+                usd_fee = 4100 * USD_TO_RUB
                 rub_fee = 50000
                 destination = "Перми"
-            else:  # Корея
-                usd_fee = 2500 * USD_TO_RUB  # 2500 USD
+            else:
+                usd_fee = 2500 * USD_TO_RUB
                 rub_fee = 150000
                 destination = "Владивостока"
 
@@ -133,7 +151,8 @@ def register_handlers(dp: Dispatcher):
                 f"Утилизационный сбор: {result['util']:,.0f} RUB\n"
                 f"Комиссия ({region}, USD): {usd_fee:,.0f} RUB\n"
                 f"Комиссия ({region}, RUB): {rub_fee:,.0f} RUB\n"
-                f"Итоговая стоимость до {destination}: {total_cost:,.0f} RUB"
+                f"Итоговая стоимость до {destination}: {total_cost:,.0f} RUB\n\n"
+                f"Осталось расчётов на сегодня: {remaining_attempts}"
             )
 
             await message.answer(response, reply_markup=types.ReplyKeyboardRemove())
