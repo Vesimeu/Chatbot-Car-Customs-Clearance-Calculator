@@ -5,7 +5,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from api_client import CalcusAPIClient
 from keyboards import get_region_keyboard, get_age_keyboard, get_engine_type_keyboard
-from convector import USD_TO_RUB
+from convector import USD_TO_RUB, CNY_TO_RUB
 from usage_tracker import check_and_update_usage, MAX_ATTEMPTS
 import logging
 import re
@@ -150,16 +150,18 @@ def register_handlers(dp: Dispatcher):
             # Комиссии
             region = data["region"]
             if region == "Китай":
-                usd_fee = 4100 * USD_TO_RUB
+                cny_fee = 16000 * CNY_TO_RUB
+                usd_fee = 3900 * USD_TO_RUB
                 rub_fee = 50000
                 destination = "Перми"
             else:
                 usd_fee = 2500 * USD_TO_RUB
                 rub_fee = 150000
+                cny_fee = 0
                 destination = "Владивостока"
 
             # Итоговая стоимость
-            total_cost = result["total2"] + usd_fee + rub_fee
+            total_cost = result["total2"] + usd_fee + rub_fee + cny_fee
 
             # Формирование ответа
             response = (
@@ -167,9 +169,9 @@ def register_handlers(dp: Dispatcher):
                 f"Таможенный сбор: {result['sbor']:,.0f} RUB\n"
                 f"Таможенная пошлина: {result['tax']:,.0f} RUB\n"
                 f"Утилизационный сбор: {result['util']:,.0f} RUB\n"
-                f"Комиссия ({region}, USD): {usd_fee:,.0f} RUB\n"
-                f"Комиссия ({region}, RUB): {rub_fee:,.0f} RUB\n"
-                f"Итоговая стоимость до {destination}: {total_cost:,.0f} RUB\n\n"
+                + (f"Комиссия (Китай, CNY): {cny_fee:,.0f} RUB\n" if region == "Китай" else "")
+                + f"Комиссия (Росси, RUB): {rub_fee + usd_fee:,.0f} RUB\n"
+                + f"Итоговая стоимость до {destination}: {total_cost:,.0f} RUB\n\n"
                 f"Осталось расчётов на сегодня: {remaining_attempts}\n"
                 f"Чтобы ещё раз рассчитать, напишите /start"
             )
